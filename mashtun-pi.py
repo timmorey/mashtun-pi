@@ -1,49 +1,43 @@
-import os
-import glob
-import time
-
 import json
+import requests
+import sensor
+import time
 from firebase import firebase
 from datetime import datetime
 
-firebase = firebase.FirebaseApplication('https://barley-f8e3f.firebaseio.com/')
+def init_sensor_record(sensorid):
+    candidate_sensors = firebase.get('/sensors', None, params={
+        'orderBy': '"deviceId"',
+        'equalTo': '"' + sensorid + '"'
+    })
+    if len(candidate_sensors) > 0:
+        recordid = list(candidate_sensors.keys())[0]
+        return recordid
+    else:
+        print('creating new record for sensor ' + sensorid)
+        record = {
+            'deviceId': sensorid,
+            'model': 'DS18B20',
+            'type': 'temperature',
+            'data': {}
+        }
+        response = firebase.post('/sensors', record)
+        recordid = response['name']
+        return recordid
 
-os.system('modprobe w1-gpio')
-os.system('modprobe w1-therm')
-
-base_dir = '/sys/bus/w1/devices/'
-device_folder = glob.glob(base_dir + '28*')[0]
-device_file = device_folder + '/w1_slave'
-device_id = device_folder.split('/')[-1]
-
-def read_temp_raw():
-    f = open(device_file, 'r')
-    lines = f.readlines()
-    f.close()
-    return lines
-
-def read_temp():
-    lines = read_temp_raw()
-    while lines[0].strip()[-3:] != 'YES':
-        time.sleep(0.2)
-        lines = read_temp_raw()
-    equals_pos = lines[1].find('t=')
-    if equals_pos != -1:
-        temp_string = lines[1][equals_pos+2:]
-        temp_c = float(temp_string) / 1000.0
-        temp_f = temp_c * 9.0 / 5.0 + 32.0
-        return temp_c, temp_f
-
-def push_temp(tempC):
-    record = {
-        'sensorId': device_id,
-        'timestamp': datetime.now().isoformat(),
-        'temperature': '{0} degC'.format(tempC)
+def push_temp(recordid, tempc):
+    patch = {
+        datetime.now().isoformat().split('.')[0]: '{0} degC'.format(tempc)
     }
-    result = firebase.post('/temperatures', record)
+    requests.patch('https://barley-f8e3f.firebaseio.com/sensors/' + recordid + '/data.json', json=patch)
+
+firebase = firebase.FirebaseApplication('https://barley-f8e3f.firebaseio.com/')
+tempsensor = sensor.Sensor()
+recordid = init_sensor_record(tempsensor.device_id)
+print('found sensor record id: ' + recordid)
 
 while True:
-    degc, degf = read_temp()
-    print(degc, degf)
-    push_temp(degc)
+    tempc = tempsensor.tempc()
+    print(tempc)
+    push_temp(recordid, tempc)
     time.sleep(1)
