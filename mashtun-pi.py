@@ -17,9 +17,9 @@ def init_sensor_record(sensorid):
         print('creating new record for sensor ' + sensorid)
         record = {
             'deviceId': sensorid,
-            'model': 'DS18B20',
+            'deviceModel': 'DS18B20',
             'type': 'temperature',
-            'data': {}
+            'temperatures': {}
         }
         response = firebase.post('/sensors', record)
         recordid = response['name']
@@ -29,7 +29,7 @@ def push_temp(recordid, tempc):
     patch = {
         datetime.now().isoformat().split('.')[0]: '{0} degC'.format(tempc)
     }
-    requests.patch('https://barley-f8e3f.firebaseio.com/sensors/' + recordid + '/data.json', json=patch)
+    requests.patch('https://barley-f8e3f.firebaseio.com/sensors/' + recordid + '/temperatures.json', json=patch)
 
 firebase = firebase.FirebaseApplication('https://barley-f8e3f.firebaseio.com/')
 tempsensor = sensor.Sensor()
